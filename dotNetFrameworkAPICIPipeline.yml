@@ -1,0 +1,59 @@
+# Build Pipeline for a .NET Framework API Application
+trigger:
+  branches:
+    include:
+      - refs/heads/Development
+name: $(date:yyyyMMdd)$(rev:.r) # Release Name will be incremented by 1
+resources:
+  repositories:
+    - repository: self
+      type: git
+      ref: refs/heads/Development
+jobs:
+- job: BuildDotNetFrameworkAPI
+  displayName: Build Dot Net Framework API
+  pool:
+    vmImage: windows-2019
+  steps:
+  # Step 1: Checkout branch and fetch latest commit (Latest commit not only has changes but a snapshot of entire soln)
+  - checkout: self
+    fetchDepth: 1
+  # Step 2: Restore the dependencies with Nuget Package Manager
+  - task: NugetCommand@2
+    displayName: Restore Package Dependencies
+    inputs:
+      solution: Source/MySoln.sln
+  # Step 3: Build the solution into a Package
+  - task: VSBuild@1
+    displayName: Build the Solution
+    inputs: 
+        solution: Source/MySoln.sln
+    # Build as a Package and as a single file (.zip) into AZ Pipelines defined location (artifact staging directory inside the agent), 
+    # Skip all Web Config Transforms (e.g. web.dev.config, web.prod.config), skip Web Config Parameters replacing (e.g. Connection Strings)
+        msbuildArgs: > 
+        /p:DeployOnBuild=true
+        /p:WebPublishMethod=Package
+        /p:PackageAsSingleFile=true
+        /p:SkipInvalidConfigurations=true
+        /p:TransformWebConfigEnabled=false
+        /p:ProfileTransformWebConfigEnabled=false
+        /p:IsTransformWebConfigDisabled=true
+        /p:AutoParameterizationWebConfigConnectionStrings=false
+        /p:MarkWebConfigAssistFilesAsExclude=false
+        /p:PackageLocation="$(build.artifactstagingdirectory)\\"
+        platform: any cpu
+        configuration: release
+  # Step 4: Once the build is done, all contents of the API project are also archived into the Agent directory along with the Soln archive
+  - task: ArchiveFiles@2
+    displayName: Archive the API Project Package
+    inputs:
+      rootFolderOrFile: Source\MyAPIs\obj\Release\Package\PackageTmp
+      includeRootFolder: false
+      archiveFile: $(build.artifactstagingdirectory)/MySoln.zip
+  # Step 5: The Agent directory is published on the Agent Network Share Location for the CD Pipeline to take over
+  - task: PublishBuildArtifacts@1
+    displayName: Publish the Build Package to Network Share Location on the Agent
+    inputs: 
+      PathtoPublish: $(build.artifactstagingdirectory)
+      TargetPath: '\\my\share\$(Build.DefinitionName)\$(Build.BuildNumber)'
+...
