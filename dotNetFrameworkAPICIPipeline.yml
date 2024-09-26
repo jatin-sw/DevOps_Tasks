@@ -50,7 +50,7 @@ jobs:
       rootFolderOrFile: Source\MyAPIs\obj\Release\Package\PackageTmp
       includeRootFolder: false
       archiveFile: $(build.artifactstagingdirectory)/MySoln.zip
-  # Step 5: The Agent directory is published on the Agent Network Share Location for the CD Pipeline to take over
+  # Step 5: The Agent directory is published on the Azure Network Share Location for the CD Pipeline to take over
   - task: PublishBuildArtifacts@1
     displayName: Publish the Build Package to Network Share Location on the Agent
     inputs: 
