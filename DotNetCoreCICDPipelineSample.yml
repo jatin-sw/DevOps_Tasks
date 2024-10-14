@@ -1,0 +1,83 @@
+#NAME THE PIPELINE SAME AS FILE (WITHOUT ".yml")
+# trigger:
+# - main
+
+resources:
+  repositories:
+    - repository: self
+      trigger: none
+
+stages:
+- stage: Build
+  displayName: Build .Net Core Solution
+  jobs:
+  - job: Build
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: DotNetCoreCLI@2
+      displayName: Restore
+      inputs:
+        command: 'restore'
+        projects: '**/*.sln'
+        feedsToUse: 'select'
+
+    - task: DotNetCoreCLI@2
+      displayName: Build
+      inputs:
+        command: 'build'
+        projects: '**/*.sln'
+    
+    - task: DotNetCoreCLI@2
+      displayName: Test
+      inputs:
+        command: 'test'
+        projects: 'tests/UnitTests/*.csproj'
+    
+    - task: DotNetCoreCLI@2
+      displayName: Publish
+      inputs:
+        command: 'publish'
+        publishWebProjects: true
+        arguments: '-o $(Build.ArtifactStagingDirectory)'
+    - script: ls -a $(Build.ArtifactStagingDirectory)
+      displayName: Show downloaded content
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Artifacts ADO - Website
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)'
+        artifact: 'Website'
+        publishLocation: 'pipeline'
+    - script: ls -a $(Build.ArtifactStagingDirectory)
+      displayName: Show downloaded content
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Artifacts ADO - Bicep
+      inputs:
+        targetPath: '$(Build.SourcesDirectory)/infra/webapp.bicep'
+        artifact: 'Bicep'
+        publishLocation: 'pipeline'
+    - script: ls -a $(Build.ArtifactStagingDirectory)
+      displayName: Show downloaded content
+- stage: Deploy
+  displayName: Deploy to an Azure Web App
+  jobs:
+    - job: Deploy
+      pool:
+        vmImage: ubuntu-latest
+      steps:
+      - task: DownloadPipelineArtifact@2
+        inputs:
+          buildType: 'current'
+          artifactName: 'Website'
+          downloadPath: '$(Build.ArtifactStagingDirectory)'
+      - script: ls -R $(Build.ArtifactStagingDirectory)
+        displayName: Show downloaded content
+      - task: AzureRmWebAppDeployment@4
+        inputs:
+          ConnectionType: 'AzureRM'
+          azureSubscription: 'Visual Studio Professional Subscription(b5eedfc8-cefe-4e77-8f2a-34f5755a0c2b)'
+          appType: 'webApp'
+          WebAppName: 'TryCICDApp'
+          packageForLinux: '$(Build.ArtifactStagingDirectory)/Web.zip'
+          AppSettings: '-UseOnlyInMemoryDatabase true -ASPNETCORE_ENVIRONMENT Development'
+      
